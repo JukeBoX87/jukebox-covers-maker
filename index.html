@@ -320,6 +320,11 @@ body.light #helpOverlay kbd{background:#f0f0f8}
 .picker-include{font-size:12.5px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border)}
 .editor-right .imgstrip{max-height:none; overflow:visible; align-content:start; grid-auto-rows:max-content; gap:10px}
 .editor-right .thumb{border-radius:11px}
+.img-tools{display:flex; flex-direction:column; gap:10px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border)}
+.img-tools .ctrl{display:flex; flex-direction:column; gap:6px}
+.img-tools .row{display:flex; justify-content:space-between; align-items:center}
+.img-tools .row label{font-size:12.5px}
+.img-tools .btn{justify-content:center}
 /* ══ Fenêtre Projets ══ */
 #projmodal-overlay{position:fixed; inset:0; z-index:5200; background:rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; backdrop-filter:blur(5px)}
 #projmodal-overlay.open{display:flex}
@@ -411,6 +416,7 @@ body.light #helpOverlay kbd{background:#f0f0f8}
     <button class="btn btn-ghost" id="randomBtn" onclick="randomPick()" title="Propose une liste de films/séries selon les mots clés saisis">🎲 Suggérer</button>
     <button class="btn btn-ghost toggle-x" id="exclAnimeBtn" onclick="toggleExcl('anime')" title="Exclure les animés du résultat suggéré">🚫 Animés</button>
     <button class="btn btn-ghost toggle-x" id="exclAnimBtn" onclick="toggleExcl('anim')" title="Exclure le genre Animation du résultat suggéré">🚫 Animation</button>
+    <button class="btn btn-ghost" onclick="document.getElementById('coverFile').click()" title="Utiliser votre propre image au lieu des images TMDB">🖼️ Importer une image</button>
   </div></div>
 
   <div id="customPanel" style="display:none">
@@ -442,7 +448,7 @@ body.light #helpOverlay kbd{background:#f0f0f8}
 
 </div>
 
-<input type="file" id="bgFile" accept="image/*" style="display:none" onchange="onBgFile(event)"><input type="file" id="artFile" accept="image/png" style="display:none" onchange="onArtFile(event)">
+<input type="file" id="coverFile" accept="image/*" style="display:none" onchange="onCoverFile(event)"><input type="file" id="bgFile" accept="image/*" style="display:none" onchange="onBgFile(event)"><input type="file" id="artFile" accept="image/png" style="display:none" onchange="onArtFile(event)">
 <input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" onchange="onFontFile(event)">
 
 <div id="font-ov" onclick="if(event.target===this)closeFontPicker()">
@@ -631,6 +637,22 @@ body.light #helpOverlay kbd{background:#f0f0f8}
       </div><!-- /editor-edit -->
 
     <div class="editor-right">
+      <div class="img-tools">
+        <button class="btn btn-ghost" onclick="document.getElementById('coverFile').click()" title="Utiliser votre propre image à la place des images TMDB">🖼️ Importer une image</button>
+        <div class="ctrl">
+          <div class="row"><label>Zoom de l'image</label><span class="sv" id="imgZoomV">100%</span></div>
+          <input type="range" id="imgZoom" min="50" max="300" value="100" oninput="syncImgAdjust(); render()">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Position horizontale</label><span class="sv" id="imgXV">0%</span></div>
+          <input type="range" id="imgX" min="-100" max="100" value="0" oninput="syncImgAdjust(); render()">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Position verticale</label><span class="sv" id="imgYV">0%</span></div>
+          <input type="range" id="imgY" min="-100" max="100" value="0" oninput="syncImgAdjust(); render()">
+        </div>
+        <button class="btn btn-ghost" onclick="resetImgAdjust(true)">↺ Recentrer l'image</button>
+      </div>
       <div class="picker-title" id="pickerTitle">Images sans texte</div>
       <label class="check picker-include"><input type="checkbox" id="showAll" onchange="if(selectedId)loadImages()"> Inclure les images avec texte</label>
       <div class="imgstrip poster" id="imgstrip"></div>
@@ -738,6 +760,7 @@ body.light #helpOverlay kbd{background:#f0f0f8}
       <div class="help-sec">Modes</div>
       <div class="help-li"><strong>Covers</strong> : image + dégradé + libellé (mode complet).</div>
       <div class="help-li"><strong>Focus</strong> : l'image seule, sans texte ni dégradé — l'onglet Édition est masqué, on choisit juste la vignette.</div>
+      <div class="help-li"><strong>Importer une image</strong> (Covers et Focus) : le bouton <strong>🖼️ Importer une image</strong> permet d'utiliser votre propre image au lieu d'une image TMDB. Le panneau Images propose aussi le <strong>zoom</strong> (50 à 300 %, 100 % = remplissage du cadre) et la <strong>position</strong> horizontale/verticale de l'image.</div>
       <div class="help-li"><strong>Custom</strong> : compose un fond libre (recherche <strong>Pexels</strong> ou votre propre image) avec un <strong>clearart PNG transparent</strong> superposé et centré — typiquement une catégorie faite avec Clearart Maker. Réglez sa taille et sa position verticale, ainsi que le flou et l'assombrissement du fond ; les marges transparentes du clearart sont retirées automatiquement à l'import.</div>
       <div class="help-sec">Astuces</div>
       <div class="help-li"><strong>🎲 Suggérer</strong> : tapez des mots clés (ex. « action », « braquage ») dans le champ dédié — l'outil propose une liste de films/séries à parcourir, et vous choisissez.</div>
@@ -815,6 +838,8 @@ let format       = 'poster';  // poster (2:3) | backdrop (16:9)
 let selectedId   = null;
 let selectedTitle= '';
 let currentImg   = null;      // Image() chargée en cover
+let currentImgImported = false; // true si l'image courante est un import local (pas une image TMDB)
+let importedName = '';        // nom (sans extension) du fichier importé
 let selectedThumbEl = null;
 let lineCount    = 1;         // 1 ou 2 lignes
 let coverMode    = 'covers';  // covers | focus (focus = image seule, sans texte ni dégradé)
@@ -1131,7 +1156,13 @@ function setFormat(f){
     if(document.getElementById('pexelsInput') && document.getElementById('pexelsInput').value.trim()) runPexels();
     return;
   }
-  if(selectedId){ clearCover(); loadImages(); }
+  if(currentImgImported){
+    // image importée : on la garde (simple recadrage au nouveau format) ; les vignettes
+    // TMDB sont rechargées dans la nouvelle orientation sans écraser l'import
+    if(selectedId) loadImages(false);
+    render();
+  }
+  else if(selectedId){ clearCover(); loadImages(); }
   else { currentImg = null; selectedThumbEl = null; render(); }
 }
 
@@ -1174,8 +1205,8 @@ function setMode(m){
   const hint = document.getElementById('stageHint');
   if(hint) hint.textContent = custom
     ? 'Choisissez un fond, importez un clearart, ajustez, puis exportez.'
-    : (m === 'focus' ? 'Choisissez une image sans texte, puis exportez.'
-                     : 'Choisissez une image sans texte, ajustez le texte, puis exportez.');
+    : (m === 'focus' ? 'Choisissez (ou importez) une image sans texte, puis exportez.'
+                     : 'Choisissez (ou importez) une image sans texte, ajustez le texte, puis exportez.');
   if(custom) refreshPexelsKeyBtn();
   render();
 }
@@ -1437,7 +1468,7 @@ async function loadImages(autoSelect){
     if(!list.length){
       strip.className = 'imgstrip';
       strip.innerHTML = `<div class="empty" style="padding:24px">Aucune image sans texte pour ce ${format==='poster'?'format affiche':'format paysage'}.<br>Cochez « Inclure les images avec texte » ou changez de titre.</div>`;
-      clearCover('Pas d\'image disponible');
+      if(!currentImgImported) clearCover('Pas d\'image disponible');
       return;
     }
     document.getElementById('pickerTitle').textContent = `${baseLabel} — ${selectedTitle} (${list.length})`;
@@ -1455,15 +1486,17 @@ async function loadImages(autoSelect){
   }catch(e){
     if(seq !== imgLoadSeq) return;
     strip.innerHTML = '<div class="empty">Erreur de chargement des images.</div>';
-    clearCover('Pas d\'image disponible');
+    if(!currentImgImported) clearCover('Pas d\'image disponible');
   }
 }
 
-function selectThumb(el, filePath){
+function selectThumb(el, filePath, keepAdjust){
   if(selectedThumbEl) selectedThumbEl.classList.remove('sel');
   selectedThumbEl = null;
   if(el){ el.classList.add('sel'); selectedThumbEl = el; }
   currentImagePath = filePath;
+  currentImgImported = false;                // on repasse sur une image TMDB
+  if(!keepAdjust) resetImgAdjust(false);     // nouveau choix → zoom/position repartent de zéro
   const seq = ++coverSeq;                    // invalide toute image encore en vol
   currentImg = null; render();               // on repart d'une cover vide
   document.getElementById('stageHint').innerHTML = '<span class="spinner"></span> Chargement…';
@@ -1553,7 +1586,12 @@ function render(){
     const ir=iw/ih, cr=W/H;
     let dw,dh;
     if(ir>cr){ dh=H; dw=H*ir; } else { dw=W; dh=W/ir; }
-    const dx=(W-dw)/2, dy=(H-dh)/2;
+    // zoom (100 % = remplissage du cadre) puis décalage : ±100 % = toute la marge disponible
+    const z = (+document.getElementById('imgZoom').value || 100)/100;
+    dw *= z; dh *= z;
+    const px = (+document.getElementById('imgX').value || 0)/100;
+    const py = (+document.getElementById('imgY').value || 0)/100;
+    const dx=(W-dw)/2 + px*Math.abs(dw-W)/2, dy=(H-dh)/2 + py*Math.abs(dh-H)/2;
     ctx.drawImage(currentImg, dx, dy, dw, dh);
   }
 
@@ -1671,7 +1709,8 @@ function render(){
 function updateEditorTitle(){
   const el = document.getElementById('editorTitle');
   if(!el) return;
-  if(coverMode==='focus'){ el.textContent = selectedTitle || '—'; return; }
+  const fallback = selectedTitle || (currentImgImported ? importedName : '') || '—';
+  if(coverMode==='focus'){ el.textContent = fallback; return; }
   let t = document.getElementById('labelInput').value || '';
   if(document.getElementById('uppercase').checked) t = t.toUpperCase();
   if(lineCount===2){
@@ -1679,7 +1718,7 @@ function updateEditorTitle(){
     if(document.getElementById('uppercase2').checked) l2 = l2.toUpperCase();
     t = (t+' '+l2).trim();
   }
-  el.textContent = t || selectedTitle || '—';
+  el.textContent = t || fallback;
 }
 async function exportPng(){
   await ensureFont();
@@ -1690,6 +1729,7 @@ async function exportPng(){
   const mime = isJpg ? 'image/jpeg' : 'image/png';
   let base = document.getElementById('labelInput').value || '';
   if(lineCount===2){ const l2=document.getElementById('label2Input').value||''; base = (base+' '+l2).trim(); }
+  if(!base.trim() && currentImgImported) base = importedName;   // pas de libellé : on reprend le nom du fichier importé
   const name = base.trim().replace(/\s+/g,'-').replace(/[^\w\-À-ÿ]/g,'').toLowerCase();
   let url;
   try{
@@ -1780,7 +1820,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 
 /* ─────────── Éditeur (cover + onglets Images/Édition) ─────────── */
-function openEditor(){
+function openEditor(keepImage){
   const custom = (coverMode === 'custom');
   document.getElementById('editorTitle').textContent = custom ? 'Composition libre' : (selectedTitle || '—');
   const eb = document.getElementById('editorBody');
@@ -1789,17 +1829,66 @@ function openEditor(){
   eb.classList.toggle('custom', custom);
   document.getElementById('editor').classList.add('open');
   if(custom){ render(); return; }     // le fond est déjà posé : pas de loadImages TMDB
+  if(keepImage){                      // import local : on garde l'image, on charge juste les vignettes
+    if(selectedId) loadImages(false);
+    render();
+    return;
+  }
   clearCover();
   loadImages();
 }
-function ensureEditorOpen(){
-  if(!document.getElementById('editor').classList.contains('open')) openEditor();
+function ensureEditorOpen(keepImage){
+  if(!document.getElementById('editor').classList.contains('open')) openEditor(keepImage);
+}
+
+/* Zoom / position de l'image (Covers et Focus) */
+function syncImgAdjust(){
+  document.getElementById('imgZoomV').textContent = document.getElementById('imgZoom').value+'%';
+  document.getElementById('imgXV').textContent    = document.getElementById('imgX').value+'%';
+  document.getElementById('imgYV').textContent    = document.getElementById('imgY').value+'%';
+}
+function resetImgAdjust(doRender){
+  document.getElementById('imgZoom').value = 100;
+  document.getElementById('imgX').value = 0;
+  document.getElementById('imgY').value = 0;
+  syncImgAdjust();
+  if(doRender) render();
+}
+
+/* Import d'une image locale comme cover (modes Covers et Focus) */
+function onCoverFile(ev){
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if(!f) return;
+  const img = new Image();
+  img.onload = ()=>{
+    coverSeq++;                              // annule une image TMDB encore en cours de chargement
+    importedName = f.name.replace(/\.[^.]+$/, '');
+    ensureEditorOpen(true);
+    if(selectedThumbEl){ selectedThumbEl.classList.remove('sel'); selectedThumbEl = null; }
+    currentImg = img; currentImagePath = null; currentImgImported = true;
+    resetImgAdjust(false);
+    document.getElementById('stageHint').textContent = 'Image importée — ' + importedName;
+    if(!selectedId){
+      document.getElementById('pickerTitle').textContent = 'Image importée';
+      const strip = document.getElementById('imgstrip');
+      strip.className = 'imgstrip';
+      strip.innerHTML = '<div class="empty" style="padding:24px">Image importée. Pour utiliser une image TMDB à la place, fermez l\'éditeur et recherchez un titre.</div>';
+    }
+    render();
+    toast('Image importée');
+  };
+  img.onerror = ()=> toast('Image illisible');
+  img.src = URL.createObjectURL(f);
 }
 
 /* Vide la cover : aucune image affichée tant qu'aucune vignette n'est choisie */
 function clearCover(msg){
   coverSeq++;                                // annule une image encore en cours de chargement
   currentImg = null;
+  currentImgImported = false;
+  importedName = '';
+  resetImgAdjust(false);
   currentImagePath = null;
   if(selectedThumbEl){ selectedThumbEl.classList.remove('sel'); selectedThumbEl = null; }
   document.getElementById('stageHint').textContent = msg || 'Chargement des images…';
@@ -2082,9 +2171,26 @@ function buildProject(name){
       gradColor: document.getElementById('gradColor').value,
       font: coverFont,
       font2: coverFont2,
-      exportFormat: document.getElementById('exportFormat').value
-    }
+      exportFormat: document.getElementById('exportFormat').value,
+      imgZoom: document.getElementById('imgZoom').value,
+      imgX: document.getElementById('imgX').value,
+      imgY: document.getElementById('imgY').value
+    },
+    imported: (coverMode!=='custom' && currentImgImported && currentImg) ? imgToJpegDataURL(currentImg, 2000) : null,
+    importedName: (coverMode!=='custom' && currentImgImported) ? importedName : ''
   };
+}
+
+/* Image importée → JPEG plafonné (le PNG d'une photo ferait exploser le stockage local). */
+function imgToJpegDataURL(src, maxSide){
+  try{
+    let w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+    const k = Math.min(1, maxSide/Math.max(w,h));
+    w = Math.round(w*k); h = Math.round(h*k);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(src, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', 0.9);
+  }catch(e){ console.error(e); return null; }
 }
 
 function setVal(id,v){ if(v===undefined||v===null) return; const el=document.getElementById(id); if(!el) return; if(el.type==='checkbox') el.checked=!!v; else el.value=v; }
@@ -2110,6 +2216,10 @@ function applyProject(p){
   chooseFont(s.font || 'Ubuntu', 'coverFont');
   chooseFont(s.font2 || 'Ubuntu', 'coverFont2');
   setVal('exportFormat', s.exportFormat);
+  setVal('imgZoom', s.imgZoom !== undefined ? s.imgZoom : 100);
+  setVal('imgX', s.imgX !== undefined ? s.imgX : 0);
+  setVal('imgY', s.imgY !== undefined ? s.imgY : 0);
+  syncImgAdjust();
   setLines(s.lineCount||1);
   syncLabels();
   selectedId = p.selectedId; selectedTitle = p.selectedTitle||''; currentImagePath = p.imagePath||null;
@@ -2138,8 +2248,18 @@ function applyProject(p){
     return;
   }
 
+  if(p.imported){
+    // image importée : restaurée depuis le projet (les vignettes TMDB restent consultables)
+    currentImgImported = true; importedName = p.importedName || '';
+    const i = new Image();
+    i.onload = ()=>{ currentImg = i; document.getElementById('stageHint').textContent = 'Image importée' + (importedName ? ' — '+importedName : ''); render(); };
+    i.onerror = ()=>{ currentImgImported = false; render(); };
+    i.src = p.imported;
+    if(selectedId) loadImages(false);
+    return;
+  }
   if(selectedId) loadImagesThenSelect(currentImagePath);
-  else if(currentImagePath) selectThumb(null, currentImagePath);
+  else if(currentImagePath) selectThumb(null, currentImagePath, true);
   else render();
 }
 
@@ -2153,8 +2273,8 @@ async function loadImagesThenSelect(path){
   const strip = document.getElementById('imgstrip');
   const imgs = strip ? strip.querySelectorAll('.thumb img') : [];
   let matched=false;
-  imgs.forEach(im=>{ if(im.getAttribute('src') && im.getAttribute('src').indexOf(path)!==-1){ selectThumb(im.parentElement, path); matched=true; } });
-  if(!matched) selectThumb(null, path);
+  imgs.forEach(im=>{ if(im.getAttribute('src') && im.getAttribute('src').indexOf(path)!==-1){ selectThumb(im.parentElement, path, true); matched=true; } });
+  if(!matched) selectThumb(null, path, true);
 }
 
 function getProjects(){ try{ return JSON.parse(localStorage.getItem('cm_projects')||'[]'); }catch(e){ return []; } }
